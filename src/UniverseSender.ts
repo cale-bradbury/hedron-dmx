@@ -1,5 +1,3 @@
-import { ArtNetSender } from './protocols/ArtNetSender'
-import { SacnSender } from './protocols/SacnSender'
 import type { DmxProtocol } from './types'
 import type { UniverseSet } from './UniverseSet'
 
@@ -9,6 +7,17 @@ export const SEND_INTERVAL_MS = 23
 export interface FrameContext {
   protocol: DmxProtocol
   lerpSpeed: number
+  /** ArtNet/sACN destination; empty means broadcast (ArtNet) or multicast (sACN). */
+  target: string
+  /** False while there's nothing patched, so an idle plugin never transmits onto the network. */
+  enabled: boolean
+}
+
+/** The transport, which lives in the plugin's main process half. */
+export interface UniverseOutput {
+  send: (frame: FrameContext, universe: number, bytes: Uint8Array) => void
+  /** Stops all output, including any keep-alive resends. */
+  stop: () => void
 }
 
 /**
@@ -19,12 +28,13 @@ export class UniverseSender {
   private timer: ReturnType<typeof setInterval> | null = null
   private lastProtocol: DmxProtocol | null = null
   private lastLerpSpeed: number | null = null
+  private lastTarget: string | null = null
+  private wasEnabled = false
 
   constructor(
     private universes: UniverseSet,
     private prepareFrame: () => FrameContext,
-    private artnet: ArtNetSender,
-    private sacn: SacnSender,
+    private output: UniverseOutput,
   ) {}
 
   public start(): void {
@@ -36,30 +46,36 @@ export class UniverseSender {
     if (!this.timer) return
     clearInterval(this.timer)
     this.timer = null
+    // Output is left as is, so a reload hands over without a blackout flicker
+    this.wasEnabled = false
   }
 
   private tick(): void {
     const context = this.prepareFrame()
 
-    // A protocol or lerp change alters how existing bytes are transmitted, not the bytes
+    if (!context.enabled) {
+      if (this.wasEnabled) this.output.stop()
+      this.wasEnabled = false
+      return
+    }
+
+    // A transport change alters how existing bytes are transmitted, not the bytes
     // themselves, so force a resend rather than waiting for the next value change.
-    if (context.protocol !== this.lastProtocol || context.lerpSpeed !== this.lastLerpSpeed) {
+    if (
+      context.protocol !== this.lastProtocol ||
+      context.lerpSpeed !== this.lastLerpSpeed ||
+      context.target !== this.lastTarget ||
+      !this.wasEnabled
+    ) {
       this.universes.markAllDirty()
       this.lastProtocol = context.protocol
       this.lastLerpSpeed = context.lerpSpeed
+      this.lastTarget = context.target
+      this.wasEnabled = true
     }
 
-    const dirty = this.universes.takeDirty()
-    if (dirty.length === 0) return
-
-    for (const { universe, bytes } of dirty) {
-      if (context.protocol === 'usb') {
-        window?.electron?.dmxWriteUniverse?.(universe, bytes, context.lerpSpeed)
-      } else if (context.protocol === 'artnet') {
-        this.artnet.sendUniverse(universe, bytes)
-      } else if (context.protocol === 'sacn') {
-        this.sacn.sendUniverse(universe, bytes)
-      }
+    for (const { universe, bytes } of this.universes.takeDirty()) {
+      this.output.send(context, universe, bytes)
     }
   }
 }

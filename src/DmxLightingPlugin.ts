@@ -1,5 +1,5 @@
-import { HedronEngine, IPlugin } from '@hedron-gl/engine'
-import { dmxIcon } from '@hedron-gl/ui-core'
+import type { HedronEngine, IPlugin } from '@hedron-gl/engine'
+import type { PluginContext } from '@hedron-gl/plugin-sdk'
 import { globalOptionNodesConfig } from './DmxLightingConfig'
 import { DMX_UNIVERSE_SIZE } from './address'
 import { PixelSource, PIXEL_STRIDE, SourceRegistry } from './PixelSource'
@@ -32,42 +32,27 @@ import { normalizeOverrides, RigFile } from './rigFile'
 import { applyMixes, crossfadeWeights, MixSource, mixPositionNodeId, normalizeMixes } from './mixer'
 import { UniverseSet } from './UniverseSet'
 import { UniverseSender, FrameContext } from './UniverseSender'
-import { ArtNetSender } from './protocols/ArtNetSender'
-import { SacnSender } from './protocols/SacnSender'
+import { LIBRARY_FILE } from './library-file'
 import type { DmxDeviceInfo, DmxProtocol, LerpMode } from './types'
 
-// Extend Window type for Electron bridge
+/** What sketches get from `@hedron-plugins/dmx-lighting`. */
+export interface LightingApi {
+  /** Creates or resizes a named pixel buffer and returns it for direct writes. */
+  source: (id: string, width?: number, height?: number) => PixelSource
+  /** Samples a canvas into a 2D source for spatial mappings. */
+  sourceFromCanvas: (
+    id: string,
+    canvas: HTMLCanvasElement,
+    options?: { width?: number; height?: number },
+  ) => PixelSource
+  /** Convenience for a single-pixel source. */
+  setColor: (id: string, r: number, g: number, b: number, w?: number, intensity?: number) => void
+}
+
 declare global {
   interface Window {
-    electron?: {
-      dmxWriteUniverse: (universe: number, bytes: Uint8Array, lerpSpeed: number) => void
-      dmxGetDevices: () => Promise<DmxDeviceInfo[]>
-      /** The fixture library, shared by every project; null when none has been saved. */
-      dmxLoadLibrary?: () => Promise<string | null>
-      dmxSaveLibrary?: (json: string) => Promise<void>
-    }
-    hedron?: {
-      engine: HedronEngine
-      lighting: {
-        /** Creates or resizes a named pixel buffer and returns it for direct writes. */
-        source: (id: string, width?: number, height?: number) => PixelSource
-        /** Samples a canvas into a 2D source for spatial mappings. */
-        sourceFromCanvas: (
-          id: string,
-          canvas: HTMLCanvasElement,
-          options?: { width?: number; height?: number },
-        ) => PixelSource
-        /** Convenience for a single-pixel source. */
-        setColor: (
-          id: string,
-          r: number,
-          g: number,
-          b: number,
-          w?: number,
-          intensity?: number,
-        ) => void
-      }
-    }
+    /** Kept for sketches written before plugins could expose an importable API. */
+    hedron?: { lighting?: LightingApi }
   }
 }
 
@@ -81,9 +66,6 @@ export interface DmxLightingState {
 
 /** Version 2 split fixtures from mappings; anything older is discarded rather than migrated. */
 const SCHEMA_VERSION = '2'
-
-/** Fallback home for the library when there is no Electron bridge, such as in a browser build. */
-const LIBRARY_STORAGE_KEY = 'hedron-dmx-fixture-library'
 
 /** Output override for checking the rig: full white on channels 1–20, or every channel at 0. */
 export type DmxTestMode = 'off' | 'white' | 'zero'
@@ -103,11 +85,12 @@ export class DmxLightingPlugin implements IPlugin {
   public static ID = 'dmx-lighting'
   public readonly id = DmxLightingPlugin.ID
   public readonly name = 'DMX Lighting'
-  public readonly iconName = dmxIcon
-  public readonly description = 'Controls DMX lighting fixtures via ArtNet or sACN.'
+  public readonly iconName = 'lightbulb'
+  public readonly description = 'Controls DMX lighting fixtures via USB, ArtNet or sACN.'
   public readonly globalOptionNodesConfig = globalOptionNodesConfig
   public readonly optionNodesConfig = []
 
+  private ctx: PluginContext
   private engine: HedronEngine
   private sources = new SourceRegistry()
   private library: FixtureType[] = [...DEFAULT_TYPES]
@@ -119,8 +102,6 @@ export class DmxLightingPlugin implements IPlugin {
   private identify: IdentifyTarget | null = null
   private devices: DmxDeviceInfo[] = []
   private universes = new UniverseSet()
-  private artnetSender = new ArtNetSender()
-  private sacnSender = new SacnSender()
   private sender: UniverseSender
 
   private compiled: CompiledRig | null = null
@@ -144,18 +125,27 @@ export class DmxLightingPlugin implements IPlugin {
   }
   private librarySaveTimer: ReturnType<typeof setTimeout> | null = null
 
-  constructor(engine: HedronEngine) {
-    this.engine = engine
+  constructor(ctx: PluginContext) {
+    this.ctx = ctx
+    this.engine = ctx.engine
     // Universe 0 always exists, so the channel map can set values before anything is hung.
     this.universes.get(0)
-    this.sender = new UniverseSender(
-      this.universes,
-      () => this.composite(),
-      this.artnetSender,
-      this.sacnSender,
-    )
+    // The transports need USB and UDP, so the main process half sends every universe
+    this.sender = new UniverseSender(this.universes, () => this.composite(), {
+      send: (frame, universe, bytes) => ctx.main.send('writeUniverse', frame, universe, bytes),
+      stop: () => ctx.main.send('stop'),
+    })
     this.sender.start()
     void this.loadLibrary()
+  }
+
+  /** The functions sketches import, bound so they can be called detached. */
+  public lightingApi(): LightingApi {
+    return {
+      source: this.source.bind(this),
+      sourceFromCanvas: this.sourceFromCanvas.bind(this),
+      setColor: this.setColor.bind(this),
+    }
   }
 
   private keyFor(key: ConfigKey | 'schema-version'): string {
@@ -402,16 +392,9 @@ export class DmxLightingPlugin implements IPlugin {
   private async loadLibrary(): Promise<void> {
     let raw: string | null = null
     try {
-      raw = (await window.electron?.dmxLoadLibrary?.()) ?? null
+      raw = await this.ctx.storage.read(LIBRARY_FILE)
     } catch (error) {
       console.warn('[DMX] Could not load the fixture library:', error)
-    }
-    if (raw === null) {
-      try {
-        raw = localStorage.getItem(LIBRARY_STORAGE_KEY)
-      } catch (_) {
-        raw = null
-      }
     }
     if (!raw) return
 
@@ -434,23 +417,16 @@ export class DmxLightingPlugin implements IPlugin {
   private saveLibrary(): void {
     if (this.librarySaveTimer) clearTimeout(this.librarySaveTimer)
     // Debounced, since the library editor saves on every keystroke.
-    this.librarySaveTimer = setTimeout(() => {
-      this.librarySaveTimer = null
-      const shipped = new Map(DEFAULT_TYPES.map((t) => [t.id, JSON.stringify(t)]))
-      const changed = this.library.filter((t) => shipped.get(t.id) !== JSON.stringify(t))
-      const json = JSON.stringify(changed, null, 2)
-      if (window.electron?.dmxSaveLibrary) {
-        window.electron
-          .dmxSaveLibrary(json)
-          .catch((error) => console.warn('[DMX] Could not save the fixture library:', error))
-        return
-      }
-      try {
-        localStorage.setItem(LIBRARY_STORAGE_KEY, json)
-      } catch (error) {
-        console.warn('[DMX] Could not save the fixture library:', error)
-      }
-    }, 400)
+    this.librarySaveTimer = setTimeout(() => this.writeLibrary(), 400)
+  }
+
+  private writeLibrary(): void {
+    this.librarySaveTimer = null
+    const shipped = new Map(DEFAULT_TYPES.map((t) => [t.id, JSON.stringify(t)]))
+    const changed = this.library.filter((t) => shipped.get(t.id) !== JSON.stringify(t))
+    this.ctx.storage
+      .write(LIBRARY_FILE, JSON.stringify(changed, null, 2))
+      .catch((error) => console.warn('[DMX] Could not save the fixture library:', error))
   }
 
   /** Adds types a project or rig file carries that this machine's library lacks. */
@@ -682,6 +658,7 @@ export class DmxLightingPlugin implements IPlugin {
     this.syncConfigFromStore(paramValues)
 
     const protocol = (paramValues[`${this.id}-global-protocol`] as DmxProtocol) || 'artnet'
+    const target = ((paramValues[`${this.id}-global-networkTarget`] as string) ?? '').trim()
     const brightness = (paramValues[`${this.id}-global-brightness`] as number) ?? 1
     const lerpSpeed = (paramValues[`${this.id}-global-lerpSpeed`] as number) ?? 0.2
     const lerpMode = (paramValues[`${this.id}-global-lerpMode`] as LerpMode) || 'linear-rgb'
@@ -751,23 +728,18 @@ export class DmxLightingPlugin implements IPlugin {
     this.applyTestPattern()
 
     // Smoothing already happened per pixel, so the transport copies straight through.
-    return { protocol, lerpSpeed: 0 }
+    const enabled = this.fixtures.length > 0 || this.overrides.length > 0 || this.testMode !== 'off'
+    return { protocol, lerpSpeed: 0, target, enabled }
   }
 
   // ── Devices ───────────────────────────────────────────────────────────────
 
   async fetchDeviceInfo() {
-    if (window?.electron?.dmxGetDevices) {
-      try {
-        this.devices = await window.electron.dmxGetDevices()
-      } catch (error) {
-        console.error('[DMX] Failed to fetch devices:', error)
-        this.devices = [{ name: 'Error fetching devices', status: 'Error' }]
-      }
-    } else {
-      const paramValues = this.engine.getStore().getState().paramValues
-      const protocol = (paramValues[`${this.id}-global-protocol`] as string) || 'artnet'
-      this.devices = [{ name: 'Stub Device', protocol, status: 'Not implemented' }]
+    try {
+      this.devices = await this.ctx.main.invoke<DmxDeviceInfo[]>('getDevices')
+    } catch (error) {
+      console.error('[DMX] Failed to fetch devices:', error)
+      this.devices = [{ name: 'Error fetching devices', status: 'Error' }]
     }
   }
 
@@ -775,8 +747,14 @@ export class DmxLightingPlugin implements IPlugin {
     return this.devices
   }
 
-  public destroy() {
+  /** Called by Hedron when the plugin is disabled or reloaded. */
+  public dispose() {
     this.sender.stop()
+    // Flush a pending library save rather than lose the last edit
+    if (this.librarySaveTimer) {
+      clearTimeout(this.librarySaveTimer)
+      this.writeLibrary()
+    }
   }
 
   logDeviceInfo() {

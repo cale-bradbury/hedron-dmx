@@ -85,6 +85,7 @@ export const DmxLightingGlobalPanel: React.FC<DmxLightingGlobalPanelProps> = ({ 
       <div>
         <ControlGrid>
           <NodeContainer nodeId={`${plugin.id}-global-protocol`} />
+          <NodeContainer nodeId={`${plugin.id}-global-networkTarget`} />
           <NodeContainer nodeId={`${plugin.id}-global-brightness`} />
           <NodeContainer nodeId={`${plugin.id}-global-lerpSpeed`} />
           <NodeContainer nodeId={`${plugin.id}-global-lerpMode`} />
@@ -163,7 +164,8 @@ export const DmxLightingGlobalPanel: React.FC<DmxLightingGlobalPanelProps> = ({ 
 
         {sources.length === 0 && (
           <div style={s.emptyNote}>
-            No sources — run a sketch that calls hedron.lighting.source() or setColor().
+            No sources — run a sketch that calls source() or setColor() from
+            @hedron-plugins/dmx-lighting.
           </div>
         )}
 

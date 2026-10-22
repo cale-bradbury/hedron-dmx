@@ -1,42 +1,39 @@
 {
-  "name": "@hedron-gl/dmx-lighting",
-  "version": "1.0.0-alpha.4",
-  "description": "DMX Lighting control for Hedron",
+  "name": "hedron-dmx-lighting",
+  "displayName": "DMX Lighting",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Drive DMX lighting fixtures from Hedron sketches over USB, ArtNet and sACN.",
   "author": "Cale Bradbury",
-  "homepage": "https://github.com/nudibranchrecords/hedron#readme",
-  "type": "module",
   "license": "ISC",
-  "main": "./dist/dmx-lighting.es.js",
-  "types": "./dist/index.d.ts",
-  "directories": {
-    "lib": "lib",
-    "test": "__tests__"
-  },
-  "files": [
-    "lib"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/nudibranchrecords/hedron.git"
+  "type": "module",
+  "hedron": {
+    "id": "dmx-lighting",
+    "apiVersion": 1,
+    "renderer": "src/index.ts",
+    "main": "src/main.ts",
+    "mainExternals": [
+      "usb"
+    ]
   },
   "scripts": {
-    "dev": "tsup src/index.ts src/core.ts --watch --dts --format esm --out-dir dist",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build": "tsup src/index.ts src/core.ts --dts --format esm --out-dir dist",
-    "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
-    "verify": "pnpm build && node scripts/verify-rig.mjs"
+    "format": "prettier . --write",
+    "verify": "tsup && node scripts/verify-rig.mjs"
   },
   "dependencies": {
-    "@hedron-gl/engine": "^1.0.0-alpha.4",
-    "@hedron-gl/ui-core": "workspace:1.0.0-alpha.4"
+    "usb": "^2.17.0"
   },
   "devDependencies": {
+    "@hedron-gl/engine": "link:../hedron/packages/engine",
+    "@hedron-gl/plugin-sdk": "link:../hedron/packages/plugin-sdk",
+    "@hedron-gl/ui-core": "link:../hedron/packages/ui-core",
+    "@types/node": "^22.0.0",
     "@types/react": "^18.3.18",
+    "prettier": "^3.4.2",
     "react": "^18.3.1",
     "tsup": "^8.3.6",
-    "typescript": "^5.6.2"
+    "typescript": "^5.9.3"
   },
-  "peerDependencies": {
-    "react": "^18.3.1"
-  }
+  "packageManager": "pnpm@9.0.0"
 }

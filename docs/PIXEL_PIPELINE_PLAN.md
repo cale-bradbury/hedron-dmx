@@ -20,7 +20,7 @@ structural reasons, not throughput reasons:
   frame. Quadratic.
 - A "fixture" holds exactly one colour, so 38 segments means 38 fixtures, 38 store keys and
   38 rows of list UI.
-- `curved-hsb` lerping happens in the main process on DMX bytes *after* swizzle, which is
+- `curved-hsb` lerping happens in the main process on DMX bytes _after_ swizzle, which is
   not interpolation in HSB.
 
 ## The model
@@ -75,21 +75,21 @@ Five concepts, each independently addressable and persistable.
 ### Types (target shape)
 
 ```ts
-type Address = { universe: number; channel: number }   // channel 1-512
+type Address = { universe: number; channel: number } // channel 1-512
 
 type ChannelSlot =
-  | FieldName                                   // 'red' | 'pan' | ... open registry
+  | FieldName // 'red' | 'pan' | ... open registry
   | { field: FieldName; scale?: number; bits?: 8 | 16; part?: 'coarse' | 'fine' }
   | { absolute: number }
   | null
 
 interface FixtureMode {
-  name: string                    // '3ch RGB', '6ch RGBWAU'
-  header?: ChannelSlot[]          // fixture-level channels before the pixel block
-  pixel: ChannelSlot[]            // layout of ONE pixel
-  pixelCount: number              // 1 = pot light, 38 = bar, 300 = tape
-  pixelStride?: number            // defaults to pixel.length
-  encoder: EncoderSpec            // how a colour becomes those fields
+  name: string // '3ch RGB', '6ch RGBWAU'
+  header?: ChannelSlot[] // fixture-level channels before the pixel block
+  pixel: ChannelSlot[] // layout of ONE pixel
+  pixelCount: number // 1 = pot light, 38 = bar, 300 = tape
+  pixelStride?: number // defaults to pixel.length
+  encoder: EncoderSpec // how a colour becomes those fields
 }
 
 interface FixtureProfile {
@@ -102,22 +102,22 @@ interface FixtureProfile {
 
 interface Tap {
   source: string
-  offset?: number                 // start pixel in the source
-  count?: number                  // pixels consumed; defaults to mode.pixelCount
-  step?: number                   // source stride between consumed pixels
-  wrap?: boolean                  // offset/step wrap around source length
+  offset?: number // start pixel in the source
+  count?: number // pixels consumed; defaults to mode.pixelCount
+  step?: number // source stride between consumed pixels
+  wrap?: boolean // offset/step wrap around source length
   arrangement?: 'forward' | 'reverse' | 'serpentine'
-  segmentSize?: number            // for serpentine / per-segment reverse
+  segmentSize?: number // for serpentine / per-segment reverse
   fit?: 'clip' | 'stretch' | 'tile'
   filter?: 'nearest' | 'linear' | 'average'
-  spatial?: { space: 'world' | 'uv' }   // sample a 2D source by placement instead of index
+  spatial?: { space: 'world' | 'uv' } // sample a 2D source by placement instead of index
 }
 
 interface PatchEntry {
   id: string
   profileId: string
   modeName: string
-  addresses: Address[]            // fan-out; same bytes written to each
+  addresses: Address[] // fan-out; same bytes written to each
   tap: Tap
   gain?: number
   curve?: 'linear' | 'srgb' | 'gamma'
@@ -135,10 +135,10 @@ interface PatchEntry {
 ### Sketch API
 
 ```ts
-const bar = hedron.lighting.source('bar', 38)      // Float32Array RGBA, reused each frame
-bar.set(i, r, g, b)                                 // or write bar.buffer directly
+const bar = hedron.lighting.source('bar', 38) // Float32Array RGBA, reused each frame
+bar.set(i, r, g, b) // or write bar.buffer directly
 hedron.lighting.sourceFromTexture('stage', renderTarget, { width: 64, height: 32 })
-hedron.lighting.setColor('house', r, g, b)          // 1-pixel source; today's simple case
+hedron.lighting.setColor('house', r, g, b) // 1-pixel source; today's simple case
 ```
 
 Sketches never see addresses, profiles or channels. One call per source per frame, and
@@ -180,7 +180,7 @@ it unscaled express that with a slot `scale` or an `absolute`).
 
 Each phase leaves the system working and shippable.
 
-### Phase 0 — Transport and buffers  ✅ done
+### Phase 0 — Transport and buffers ✅ done
 
 No user-visible change; unblocks everything after it.
 
@@ -201,7 +201,7 @@ No user-visible change; unblocks everything after it.
 **Done when:** the existing pot-light sketch behaves identically, with no JSON on the hot
 path and no object graph crossing IPC.
 
-### Phase 1 — Core model, compositor, migration  ✅ done
+### Phase 1 — Core model, compositor, migration ✅ done
 
 1. Add the `Source` registry, `FixtureProfile`, `FixtureMode`, `PatchEntry`, and a minimal
    `Tap` (offset / count / forward only).
@@ -216,7 +216,7 @@ path and no object graph crossing IPC.
 **Done when:** the LED bar runs as one patch entry with `pixel: ['red','green','blue'],
 pixelCount: 38` driven by a 38-pixel source, and every existing fixture still works.
 
-### Phase 2 — Taps and transforms  ✅ done
+### Phase 2 — Taps and transforms ✅ done
 
 1. `offset` with `wrap`, plus `step` and `count`.
 2. `arrangement`: `reverse` and `serpentine` with `segmentSize`, covering per-segment flip
@@ -232,7 +232,7 @@ pixelCount: 38` driven by a 38-pixel source, and every existing fixture still wo
 a distinct pixel or span from the strip source while keeping their own intensity and strobe
 channels.
 
-### Phase 3 — Encoders and fixture modes  ✅ done
+### Phase 3 — Encoders and fixture modes ✅ done
 
 1. Encoder registry: `rgb`, `rgbw` (white extraction `none` / `min` / `max-preserve` with a
    configurable white point), `rgbwa` / `rgbwauv` via a generalised primaries fit, `cmy`,
@@ -248,7 +248,7 @@ channels.
 **Done when:** a fixed-colour-wheel fixture and a 16-bit mover can both be patched with no
 code change to the plugin.
 
-### Phase 4 — Patch UI and fixture library  ✅ done
+### Phase 4 — Patch UI and fixture library ✅ done
 
 1. Fixture library: JSON profiles, shipped defaults plus a user library in the store, seeded
    with the real rig. Create, duplicate and edit in the panel.
@@ -265,7 +265,7 @@ code change to the plugin.
 **Done when:** patching a new physical light is done entirely in the UI, with conflicts
 caught before they reach the wire.
 
-### Phase 5 — Layout and spatial pixel mapping  ✅ done
+### Phase 5 — Layout and spatial pixel mapping ✅ done
 
 1. `placement` on patch entries: position, rotation, size, pixel pitch.
 2. Stage preview panel: top-down and elevation views, live colours, drag to position, click

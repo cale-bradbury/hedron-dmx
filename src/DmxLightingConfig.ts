@@ -15,6 +15,14 @@ export const globalOptionNodesConfig = [
   },
   {
     nodeType: 'param',
+    key: 'networkTarget',
+    title: 'Network Target IP',
+    // Blank broadcasts ArtNet to the local network and sends sACN to its standard multicast group
+    valueType: 'string',
+    defaultValue: '',
+  },
+  {
+    nodeType: 'param',
     key: 'brightness',
     title: 'Brightness',
     valueType: 'number',
