@@ -92,8 +92,6 @@ export class DmxLightingPlugin implements IPlugin {
   public readonly name = 'DMX Lighting'
   public readonly iconName = 'lightbulb'
   public readonly description = 'Controls DMX lighting fixtures via USB, ArtNet or sACN.'
-  public readonly globalOptionNodesConfig = globalOptionNodesConfig
-  public readonly optionNodesConfig = []
 
   private ctx: PluginContext
   private engine: HedronEngine
@@ -145,6 +143,26 @@ export class DmxLightingPlugin implements IPlugin {
     })
     this.sender.start()
     void this.loadLibrary()
+  }
+
+  /**
+   * Creates the global settings nodes. Ids keep the `<id>-global-<key>` form Hedron used to
+   * generate, so projects saved before keep their values.
+   */
+  public onEngineInitialize(engine: HedronEngine): void {
+    for (const cfg of globalOptionNodesConfig) {
+      engine.addNodeOnce(`${this.id}-global-${cfg.key}`, null, cfg)
+    }
+
+    // A saved project's enum nodes carry the options they were saved with, so refresh them
+    engine.getStore().setState((state) => {
+      for (const cfg of globalOptionNodesConfig) {
+        const node = state.nodes[`${this.id}-global-${cfg.key}`] as
+          Record<string, unknown> | undefined
+        if (node && 'options' in cfg) node.options = [...cfg.options]
+      }
+      return state
+    })
   }
 
   /** The functions sketches import, bound so they can be called detached. */
