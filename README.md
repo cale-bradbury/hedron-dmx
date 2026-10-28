@@ -1,6 +1,6 @@
 # DMX Lighting for Hedron
 
-A Hedron plugin that drives DMX lighting over USB (ENTTEC Open DMX / FT232R), ArtNet and sACN.
+A [Hedron](https://github.com/nudibranchrecords/hedron/) plugin that drives DMX lighting over USB (ENTTEC Open DMX / FT232R), ArtNet and sACN.
 Sketches write colours into named sources; the panel decides which lights exist, where they are
 patched and which colours reach which of their heads.
 
