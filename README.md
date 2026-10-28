@@ -48,7 +48,18 @@ Every export is `undefined` while the plugin isn't loaded, hence the `?.`. For t
 works. Other plugins import it the same way, with `"dmx-lighting"` in their `hedron.dependencies`.
 Sources keep working across a hot reload of this plugin, since the new instance adopts them.
 
-See `DMX.md` for the full model and `example/sketches/fixture-color` for a working sketch.
+See `DMX.md` for the full model. Working sketches live in `example/sketches`:
+
+| Sketch          | Writes                                                                     |
+| --------------- | -------------------------------------------------------------------------- |
+| `fixture-color` | One colour with `setColor`, and tints the scene to match                   |
+| `color-control` | A four-colour palette from colour-theory rules, as a four-pixel source     |
+| `bar-vu`        | Three overlaid VU meters across a pixel strip; bind each to an audio band  |
+| `bar-spectrum`  | The audio plugin's full spectrum across a pixel strip, coloured by level   |
+| `bar-chase`     | Three chase heads with fading trails, each placed by an LFO or audio value |
+
+The bar sketches share `example/shared/BarStrip.ts`, which handles the source, an on-screen
+preview, and master hue shift and brightness.
 
 ## Layout
 

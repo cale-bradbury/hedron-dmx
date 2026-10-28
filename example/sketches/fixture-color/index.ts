@@ -17,20 +17,16 @@ const fragmentShader = `
 
 export default class FixtureColorSketch {
   shader?: ShaderMaterial
-  pass?: ShaderPass
   passes?: Pass[]
+  private colorA = new Vector3()
+  private colorB = new Vector3()
 
   getPasses(): Pass[] {
     if (!this.passes) {
-      this.createPasses()
+      this.shader = this.createTintShader()
+      this.passes = [new ShaderPass(this.shader, 'u_texture')]
     }
-    return this.passes!
-  }
-
-  createPasses() {
-    this.shader = this.createTintShader()
-    this.pass = new ShaderPass(this.shader, 'u_texture')
-    this.passes = [this.pass]
+    return this.passes
   }
 
   createTintShader(): ShaderMaterial {
@@ -52,32 +48,27 @@ export default class FixtureColorSketch {
   }
 
   update({ params }) {
-    // Mix the two colors
-    const colorA = new Vector3(params.colorA[0], params.colorA[1], params.colorA[2])
-    const colorB = new Vector3(params.colorB[0], params.colorB[1], params.colorB[2])
-    const mixed = colorA.clone().lerp(colorB, params.mix)
-    this.setUniform('u_color', mixed)
-    this.setUniform('u_brightness', params.brightness)
+    const mixed = this.colorA
+      .fromArray(params.colorA)
+      .lerp(this.colorB.fromArray(params.colorB), params.mix)
+    if (this.shader) {
+      this.shader.uniforms.u_color.value.copy(mixed)
+      this.shader.uniforms.u_brightness.value = params.brightness
+    }
 
-    // DMX output: a one-pixel source; which fixtures show it is a mapping in the DMX panel.
-    // setColor is undefined while the DMX plugin isn't loaded
+    // A one-pixel source; mappings in the DMX panel decide which lights show it.
+    // setColor is undefined while the DMX plugin isn't loaded.
     if (setColor) {
       const byte = (v: number) =>
         Math.max(0, Math.min(255, Math.round(v * 255 * params.brightness)))
       setColor(
-        params.fixtureName || 'fixture-1',
+        params.sourceName || 'fixture-1',
         byte(mixed.x),
         byte(mixed.y),
         byte(mixed.z),
         byte(params.white),
         byte(params.intensity),
       )
-    }
-  }
-
-  setUniform(key: string, value: any) {
-    if (this.shader?.uniforms[key]) {
-      this.shader.uniforms[key].value = value
     }
   }
 
@@ -88,8 +79,8 @@ export default class FixtureColorSketch {
       category: 'lighting',
       params: [
         {
-          title: 'Fixture Name',
-          key: 'fixtureName',
+          title: 'Source Name',
+          key: 'sourceName',
           valueType: 'string',
           defaultValue: 'fixture-1',
         },
