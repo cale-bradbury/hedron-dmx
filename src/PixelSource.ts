@@ -260,6 +260,10 @@ export class SourceRegistry {
   private sources = new Map<string, PixelSource>()
   public revision = 0
 
+  constructor(sources: Iterable<PixelSource> = []) {
+    for (const source of sources) this.sources.set(source.id, source)
+  }
+
   public get(id: string): PixelSource | undefined {
     return this.sources.get(id)
   }

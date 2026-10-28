@@ -13,8 +13,9 @@ export default definePlugin({
     window.hedron = { ...window.hedron, lighting }
     const dispose = plugin.dispose.bind(plugin)
     plugin.dispose = () => {
-      dispose()
+      const handoff = dispose()
       if (window.hedron?.lighting === lighting) delete window.hedron.lighting
+      return handoff
     }
 
     return plugin
@@ -22,5 +23,5 @@ export default definePlugin({
   views: {
     globalPanel: DmxLightingGlobalPanel,
   },
-  sketchApi: (plugin) => ({ ...plugin.lightingApi() }),
+  api: (plugin) => ({ ...plugin.lightingApi() }),
 })

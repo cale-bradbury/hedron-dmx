@@ -45,7 +45,8 @@ setColor?.('house', 255, 128, 0)
 
 Every export is `undefined` while the plugin isn't loaded, hence the `?.`. For types, copy
 `types/sketch-api.d.ts` into your sketches project. The older `window.hedron.lighting` global still
-works.
+works. Other plugins import it the same way, with `"dmx-lighting"` in their `hedron.dependencies`.
+Sources keep working across a hot reload of this plugin, since the new instance adopts them.
 
 See `DMX.md` for the full model and `example/sketches/fixture-color` for a working sketch.
 

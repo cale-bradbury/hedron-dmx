@@ -35,7 +35,12 @@ import { UniverseSender, FrameContext } from './UniverseSender'
 import { LIBRARY_FILE } from './library-file'
 import type { DmxDeviceInfo, DmxProtocol, LerpMode } from './types'
 
-/** What sketches get from `@hedron-plugins/dmx-lighting`. */
+/** Handed from a disposed instance to the one that replaces it on a hot reload. */
+interface DmxHandoff {
+  sources: SourceRegistry
+}
+
+/** What sketches and other plugins get from `@hedron-plugins/dmx-lighting`. */
 export interface LightingApi {
   /** Creates or resizes a named pixel buffer and returns it for direct writes. */
   source: (id: string, width?: number, height?: number) => PixelSource
@@ -92,7 +97,7 @@ export class DmxLightingPlugin implements IPlugin {
 
   private ctx: PluginContext
   private engine: HedronEngine
-  private sources = new SourceRegistry()
+  private sources: SourceRegistry
   private library: FixtureType[] = [...DEFAULT_TYPES]
   private fixtures: FixtureInstance[] = []
   private mappings: Mapping[] = []
@@ -128,6 +133,9 @@ export class DmxLightingPlugin implements IPlugin {
   constructor(ctx: PluginContext) {
     this.ctx = ctx
     this.engine = ctx.engine
+    // Sketches keep writing to the sources they were given, so a reload adopts the last instance's
+    const previous = (ctx.previousState as Partial<DmxHandoff> | undefined)?.sources
+    this.sources = new SourceRegistry(typeof previous?.list === 'function' ? previous.list() : [])
     // Universe 0 always exists, so the channel map can set values before anything is hung.
     this.universes.get(0)
     // The transports need USB and UDP, so the main process half sends every universe
@@ -747,14 +755,15 @@ export class DmxLightingPlugin implements IPlugin {
     return this.devices
   }
 
-  /** Called by Hedron when the plugin is disabled or reloaded. */
-  public dispose() {
+  /** Called by Hedron when the plugin is disabled or reloaded; a reloaded instance gets the sources back. */
+  public dispose(): DmxHandoff {
     this.sender.stop()
     // Flush a pending library save rather than lose the last edit
     if (this.librarySaveTimer) {
       clearTimeout(this.librarySaveTimer)
       this.writeLibrary()
     }
+    return { sources: this.sources }
   }
 
   logDeviceInfo() {
