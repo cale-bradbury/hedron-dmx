@@ -1,4 +1,4 @@
-import { IPlugin } from '@hedron-gl/engine'
+import type { ConfigParam } from '@hedron-gl/engine'
 
 export const globalOptionNodesConfig = [
   {
@@ -75,4 +75,4 @@ export const globalOptionNodesConfig = [
     sliderMin: 1,
     sliderMax: 50,
   },
-] as const satisfies IPlugin['globalOptionNodesConfig']
+] as const satisfies readonly ConfigParam[]
